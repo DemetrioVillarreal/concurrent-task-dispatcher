@@ -129,4 +129,154 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
         done: false,
     }));
 
-    
+    let monitor_state = Arc::clone(&shared_state);
+
+    let monitor_handle = thread::spawn(move || {
+        let mut cpu_samples: Vec<u32> = Vec::new();
+        let mut worker_samples: Vec<usize> = Vec::new();
+        let mut max_cpu = 0;
+
+        loop {
+            thread::sleep(Duration::from_millis(10));
+
+            let state = monitor_state.lock().unwrap();
+
+            cpu_samples.push(state.current_cpu);
+            worker_samples.push(state.active_workers);
+
+            if state.current_cpu > max_cpu {
+                max_cpu = state.current_cpu;
+            }
+
+            if state.done {
+                break;
+            }
+        }
+
+        let mut cpu_total = 0;
+        for value in &cpu_samples {
+            cpu_total += *value as usize;
+        }
+
+        let mut worker_total = 0;
+        for value in &worker_samples {
+            worker_total += *value;
+        }
+
+        let average_cpu = if cpu_samples.len() > 0 {
+            cpu_total as f64 / cpu_samples.len() as f64
+        } else {
+            0.0
+        };
+
+        let average_active_workers = if worker_samples.len() > 0 {
+            worker_total as f64 / worker_samples.len() as f64
+        } else {
+            0.0
+        };
+
+        MonitorResult {
+
+            average_cpu,
+            average_active_workers,
+            max_cpu,
+            
+        }
+    });
+
+    let (task_sender, task_receiver) = mpsc::channel::<Task>();
+    let generator_config = config.clone();
+
+    let generator_handle = thread::spawn(move || {
+        let mut rng = StdRng::seed_from_u64(generator_config.seed);
+
+        for id in 1..=generator_config.total_tasks {
+            let random_number = rng.gen_range(0..100);
+
+            let kind;
+            let cpu_cost;
+
+            if random_number < generator_config.io_percent {
+                kind = TaskKind::IO;
+                cpu_cost = 10;
+            } else {
+                kind = TaskKind::CPU;
+                cpu_cost = 35;
+            }
+
+            let task = Task {
+                id,
+                kind,
+                duration_ms: generator_config.duration_ms,
+                cpu_cost,
+                created_at: Instant::now(),
+            };
+
+            task_sender.send(task).unwrap();
+
+            thread::sleep(Duration::from_millis(generator_config.interval_ms));
+        }
+    });
+
+
+    let (complete_sender, complete_receiver) = mpsc::channel::<CompletedTask>();
+
+    let mut worker_senders = Vec::new();
+
+    let mut worker_handles = Vec::new();
+
+    for worker_id in 0..config.workers {
+        let (worker_sender, worker_receiver) = mpsc::channel::<Option<Task>>();
+        worker_senders.push(worker_sender);
+
+        let worker_complete_sender = complete_sender.clone();
+
+        let handle = thread::spawn(move || {
+
+            loop {
+
+                let message = worker_receiver.recv().unwrap();
+
+                match message {
+                    Some(task) => {
+                        let start = Instant::now();
+
+
+
+                        println!(
+                            "Worker {} started task {} ({:?})",
+                            worker_id, task.id, task.kind
+                        );
+
+                        thread::sleep(Duration::from_millis(task.duration_ms));
+
+                        let finish = Instant::now();
+
+                        let completed = CompletedTask {
+                            kind: task.kind,
+                            wait_ms: start.duration_since(task.created_at).as_millis(),
+                            turnaround_ms: finish.duration_since(task.created_at).as_millis(),
+                            cpu_cost: task.cpu_cost,
+                            worker_id,
+
+
+                        };
+
+                        worker_complete_sender.send(completed).unwrap();
+                    }
+                    None => {
+
+                        break;
+                    }
+
+                }
+
+            }
+
+        });
+
+
+
+        worker_handles.push(handle);
+
+    }
