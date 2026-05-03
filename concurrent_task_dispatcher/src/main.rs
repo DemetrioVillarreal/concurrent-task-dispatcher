@@ -280,3 +280,100 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
         worker_handles.push(handle);
 
     }
+
+
+
+    let mut fifo_queue: VecDeque<Task> = VecDeque::new();
+
+    let mut cpu_queue: VecDeque<Task> = VecDeque::new();
+    let mut io_queue: VecDeque<Task> = VecDeque::new();
+
+    let mut available_workers: Vec<usize> = Vec::new();
+
+    for i in 0..config.workers {
+        available_workers.push(i);
+    }
+
+    let mut completed_tasks: Vec<CompletedTask> = Vec::new();
+
+    while completed_tasks.len() < config.total_tasks {
+
+        loop {
+            match task_receiver.try_recv() {
+                Ok(task) => {
+
+                    match policy {
+                        Policy::Fifo => {
+                            fifo_queue.push_back(task);
+                        }
+                        Policy::Optimized => {
+
+                            match task.kind {
+
+                                TaskKind::CPU => cpu_queue.push_back(task),
+                                TaskKind::IO => io_queue.push_back(task),
+                            }
+
+                        }
+                    }
+
+                }
+                Err(mpsc::TryRecvError::Empty) => {
+                    break;
+
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    break;
+                }
+            }
+        }
+
+        loop {
+
+            match complete_receiver.try_recv() {
+                Ok(done_task) => {
+                    {
+
+
+                        let mut state = shared_state.lock().unwrap();
+
+                        if state.current_cpu >= done_task.cpu_cost {
+                            state.current_cpu -= done_task.cpu_cost;
+                        }
+
+                        if state.active_workers > 0 {
+                            state.active_workers -= 1;
+                        }
+                    }
+
+                    available_workers.push(done_task.worker_id);
+                    completed_tasks.push(done_task);
+
+                }
+                Err(mpsc::TryRecvError::Empty) => {
+                    break;
+
+
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+
+                    break;
+
+                }
+            }
+        }
+
+        loop {
+            if available_workers.len() == 0 {
+
+
+                break;
+            }
+
+            let current_cpu = {
+
+                let state = shared_state.lock().unwrap();
+                state.current_cpu
+
+                
+            };
