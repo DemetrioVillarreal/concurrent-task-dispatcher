@@ -13,6 +13,7 @@ enum TaskKind {
 
 #[derive(Clone)]
 struct Task {
+    
     id: usize,
     arrival_time: u128,
     kind: TaskKind,
@@ -22,7 +23,9 @@ struct Task {
 }
 
 struct CompletedTask {
+
     id: usize,
+
     kind: TaskKind,
     wait_ms: u128,
     turnaround_ms: u128,
@@ -67,63 +70,95 @@ struct SimulationResult {
     average_wait_ms: f64,
     average_turnaround_ms: f64,
     max_wait_ms: u128,
+
     average_cpu: f64,
     worker_usage: f64,
     max_cpu: u32,
 }
 
-
-
 fn main() {
+    println!("Concurrent Task Dispatcher");
+    println!("This program runs FIFO and optimized scheduling.");
+    println!("It runs both 70/30 and 80/20 IO/CPU workloads.");
+    println!();
 
-    let config = Config {
-
+    let config_70 = Config {
         total_tasks: 1000,
         workers: 8,
         io_percent: 70,
         interval_ms: 20,
         duration_ms: 200,
         seed: 12345,
-
     };
 
-    println!("Concurrent Task Dispatcher");
-    println!("Tasks: {}", config.total_tasks);
-    println!("Workers: {}", config.workers);
-    println!("Workload: {}% IO / {}% CPU", config.io_percent, 100 - config.io_percent);
-    println!();
+    let config_80 = Config {
+        total_tasks: 1000,
+        workers: 8,
+        io_percent: 80,
+        interval_ms: 20,
+        duration_ms: 200,
+        seed: 54321,
+    };
 
-    let fifo_result = run_simulation(config.clone(), Policy::Fifo);
-    print_result(&fifo_result);
+
+    let fifo_70 = run_simulation(config_70.clone(), Policy::Fifo);
+    print_result(&fifo_70);
 
     println!();
     println!("----------------------------------------");
     println!();
 
-    let optimized_result = run_simulation(config.clone(), Policy::Optimized);
-    print_result(&optimized_result);
+    let optimized_70 = run_simulation(config_70.clone(), Policy::Optimized);
+    print_result(&optimized_70);
 
     println!();
-    println!("Comparison:");
-    println!("FIFO runtime: {} ms", fifo_result.makespan_ms);
-    println!("Optimized runtime: {} ms", optimized_result.makespan_ms);
-    println!("FIFO average CPU: {:.2}%", fifo_result.average_cpu);
-    println!("Optimized average CPU: {:.2}%", optimized_result.average_cpu);
+    println!("========================================");
+    println!();
+
+    let fifo_80 = run_simulation(config_80.clone(), Policy::Fifo);
+    print_result(&fifo_80);
+
+    println!();
+    println!("----------------------------------------");
+    println!();
+
+    let optimized_80 = run_simulation(config_80.clone(), Policy::Optimized);
+    print_result(&optimized_80);
+
+    println!();
+    println!("========================================");
+    println!("Final Comparison");
+    println!("70/30 FIFO runtime: {} ms", fifo_70.makespan_ms);
+    println!("70/30 Optimized runtime: {} ms", optimized_70.makespan_ms);
+    println!("70/30 FIFO average CPU: {:.2}%", fifo_70.average_cpu);
+
+    println!("70/30 Optimized average CPU: {:.2}%", optimized_70.average_cpu);
+    println!();
+    println!("80/20 FIFO runtime: {} ms", fifo_80.makespan_ms);
+    println!("80/20 Optimized runtime: {} ms", optimized_80.makespan_ms);
+    println!("80/20 FIFO average CPU: {:.2}%", fifo_80.average_cpu);
+
+    println!("80/20 Optimized average CPU: {:.2}%", optimized_80.average_cpu);
 }
 
 fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
-
-    let name = match policy {
-        Policy::Fifo => "FIFO".to_string(),
-        Policy::Optimized => "Optimized".to_string(),
+    let policy_name = match policy {
+        Policy::Fifo => "FIFO",
+        Policy::Optimized => "Optimized",
     };
+
+    let name = format!(
+        "{} {}% IO / {}% CPU",
+        policy_name,
+        config.io_percent,
+        100 - config.io_percent
+    );
 
     println!("Starting {} simulation...", name);
 
     let start_time = Instant::now();
 
     let shared_state = Arc::new(Mutex::new(SharedState {
-
         current_cpu: 0,
         active_workers: 0,
         done: false,
@@ -180,7 +215,6 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
             average_cpu,
             average_active_workers,
             max_cpu,
-            
         }
     });
 
@@ -200,12 +234,15 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
                 kind = TaskKind::IO;
                 cpu_cost = 10;
             } else {
+
+
                 kind = TaskKind::CPU;
                 cpu_cost = 35;
             }
 
             let task = Task {
                 id,
+                arrival_time: id as u128 * generator_config.interval_ms as u128,
                 kind,
                 duration_ms: generator_config.duration_ms,
                 cpu_cost,
@@ -218,11 +255,9 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
         }
     });
 
-
     let (complete_sender, complete_receiver) = mpsc::channel::<CompletedTask>();
 
     let mut worker_senders = Vec::new();
-
     let mut worker_handles = Vec::new();
 
     for worker_id in 0..config.workers {
@@ -232,16 +267,12 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
         let worker_complete_sender = complete_sender.clone();
 
         let handle = thread::spawn(move || {
-
             loop {
-
                 let message = worker_receiver.recv().unwrap();
 
                 match message {
                     Some(task) => {
                         let start = Instant::now();
-
-
 
                         println!(
                             "Worker {} started task {} ({:?})",
@@ -253,38 +284,29 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
                         let finish = Instant::now();
 
                         let completed = CompletedTask {
+                            id: task.id,
+
+
                             kind: task.kind,
                             wait_ms: start.duration_since(task.created_at).as_millis(),
                             turnaround_ms: finish.duration_since(task.created_at).as_millis(),
                             cpu_cost: task.cpu_cost,
                             worker_id,
-
-
                         };
 
                         worker_complete_sender.send(completed).unwrap();
                     }
                     None => {
-
                         break;
                     }
-
                 }
-
             }
-
         });
 
-
-
         worker_handles.push(handle);
-
     }
 
-
-
     let mut fifo_queue: VecDeque<Task> = VecDeque::new();
-
     let mut cpu_queue: VecDeque<Task> = VecDeque::new();
     let mut io_queue: VecDeque<Task> = VecDeque::new();
 
@@ -297,30 +319,24 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
     let mut completed_tasks: Vec<CompletedTask> = Vec::new();
 
     while completed_tasks.len() < config.total_tasks {
-
         loop {
+
             match task_receiver.try_recv() {
                 Ok(task) => {
-
                     match policy {
                         Policy::Fifo => {
                             fifo_queue.push_back(task);
                         }
                         Policy::Optimized => {
-
                             match task.kind {
-
                                 TaskKind::CPU => cpu_queue.push_back(task),
                                 TaskKind::IO => io_queue.push_back(task),
                             }
-
                         }
                     }
-
                 }
                 Err(mpsc::TryRecvError::Empty) => {
                     break;
-
                 }
                 Err(mpsc::TryRecvError::Disconnected) => {
                     break;
@@ -329,15 +345,11 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
         }
 
         loop {
-
             match complete_receiver.try_recv() {
                 Ok(done_task) => {
                     {
-
-
                         let mut state = shared_state.lock().unwrap();
 
-                        
                         if state.current_cpu >= done_task.cpu_cost {
                             state.current_cpu -= done_task.cpu_cost;
                         }
@@ -349,15 +361,11 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
 
                     available_workers.push(done_task.worker_id);
                     completed_tasks.push(done_task);
-
                 }
                 Err(mpsc::TryRecvError::Empty) => {
                     break;
-
-
                 }
                 Err(mpsc::TryRecvError::Disconnected) => {
-
                     break;
 
                 }
@@ -366,24 +374,16 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
 
         loop {
             if available_workers.len() == 0 {
-
-
                 break;
             }
 
             let current_cpu = {
-
                 let state = shared_state.lock().unwrap();
                 state.current_cpu
+            };
 
-                
-            }; 
-
-
-
-             let next_task = choose_task(
+            let next_task = choose_task(
                 policy,
-
                 current_cpu,
                 &mut fifo_queue,
                 &mut cpu_queue,
@@ -403,7 +403,6 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
                     worker_senders[worker_id].send(Some(task)).unwrap();
                 }
                 None => {
-
                     break;
                 }
             }
@@ -416,7 +415,6 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
         sender.send(None).unwrap();
     }
 
-
     {
         let mut state = shared_state.lock().unwrap();
         state.done = true;
@@ -425,13 +423,13 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
     generator_handle.join().unwrap();
 
     for handle in worker_handles {
+
         handle.join().unwrap();
     }
 
     let monitor_result = monitor_handle.join().unwrap();
 
     let makespan_ms = start_time.elapsed().as_millis();
-
 
     let mut total_wait = 0;
     let mut total_turnaround = 0;
@@ -440,8 +438,9 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
     let mut io_completed = 0;
 
     for task in &completed_tasks {
-        total_wait += task.wait_ms;
 
+
+        total_wait += task.wait_ms;
         total_turnaround += task.turnaround_ms;
 
         if task.wait_ms > max_wait {
@@ -463,7 +462,6 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
 
     SimulationResult {
         name,
-
         total_completed,
         cpu_completed,
         io_completed,
@@ -476,4 +474,65 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
         worker_usage,
         max_cpu: monitor_result.max_cpu,
     }
+}
+
+fn choose_task(
+    policy: Policy,
+    current_cpu: u32,
+    fifo_queue: &mut VecDeque<Task>,
+    cpu_queue: &mut VecDeque<Task>,
+    io_queue: &mut VecDeque<Task>,
+) -> Option<Task> {
+    match policy {
+        Policy::Fifo => {
+            if let Some(task) = fifo_queue.front() {
+                if current_cpu + task.cpu_cost <= 100 {
+                    return fifo_queue.pop_front();
+                }
+            }
+
+            None
+        }
+
+        Policy::Optimized => {
+            if let Some(task) = cpu_queue.front() {
+
+                if current_cpu + task.cpu_cost <= 100 && current_cpu <= 65 {
+                    return cpu_queue.pop_front();
+                }
+            }
+
+            if let Some(task) = io_queue.front() {
+                if current_cpu + task.cpu_cost <= 100 {
+                    return io_queue.pop_front();
+                }
+            }
+
+            if let Some(task) = cpu_queue.front() {
+                if current_cpu + task.cpu_cost <= 100 {
+                    return cpu_queue.pop_front();
+                }
+            }
+
+
+            None
+        }
+
+    }
+}
+
+fn print_result(result: &SimulationResult) {
+
+    println!();
+    println!("Simulation: {}", result.name);
+    println!("Total completed: {}", result.total_completed);
+    println!("CPU tasks completed: {}", result.cpu_completed);
+    println!("IO tasks completed: {}", result.io_completed);
+    println!("Total runtime / makespan: {} ms", result.makespan_ms);
+    println!("Average wait time: {:.2} ms", result.average_wait_ms);
+    println!("Average turnaround time: {:.2} ms", result.average_turnaround_ms);
+    println!("Max wait time: {} ms", result.max_wait_ms);
+    println!("Average CPU usage: {:.2}%", result.average_cpu);
+    println!("Max CPU usage: {}%", result.max_cpu);
+    println!("Average worker usage: {:.2}%", result.worker_usage);
 }
