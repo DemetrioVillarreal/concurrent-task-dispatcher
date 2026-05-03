@@ -337,6 +337,7 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
 
                         let mut state = shared_state.lock().unwrap();
 
+                        
                         if state.current_cpu >= done_task.cpu_cost {
                             state.current_cpu -= done_task.cpu_cost;
                         }
@@ -376,4 +377,103 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
                 state.current_cpu
 
                 
-            };
+            }; 
+
+
+
+             let next_task = choose_task(
+                policy,
+
+                current_cpu,
+                &mut fifo_queue,
+                &mut cpu_queue,
+                &mut io_queue,
+            );
+
+            match next_task {
+                Some(task) => {
+                    let worker_id = available_workers.pop().unwrap();
+
+                    {
+                        let mut state = shared_state.lock().unwrap();
+                        state.current_cpu += task.cpu_cost;
+                        state.active_workers += 1;
+                    }
+
+                    worker_senders[worker_id].send(Some(task)).unwrap();
+                }
+                None => {
+
+                    break;
+                }
+            }
+        }
+
+        thread::sleep(Duration::from_millis(1));
+    }
+
+    for sender in &worker_senders {
+        sender.send(None).unwrap();
+    }
+
+
+    {
+        let mut state = shared_state.lock().unwrap();
+        state.done = true;
+    }
+
+    generator_handle.join().unwrap();
+
+    for handle in worker_handles {
+        handle.join().unwrap();
+    }
+
+    let monitor_result = monitor_handle.join().unwrap();
+
+    let makespan_ms = start_time.elapsed().as_millis();
+
+
+    let mut total_wait = 0;
+    let mut total_turnaround = 0;
+    let mut max_wait = 0;
+    let mut cpu_completed = 0;
+    let mut io_completed = 0;
+
+    for task in &completed_tasks {
+        total_wait += task.wait_ms;
+
+        total_turnaround += task.turnaround_ms;
+
+        if task.wait_ms > max_wait {
+            max_wait = task.wait_ms;
+        }
+
+        match task.kind {
+            TaskKind::CPU => cpu_completed += 1,
+            TaskKind::IO => io_completed += 1,
+        }
+    }
+
+    let total_completed = completed_tasks.len();
+
+    let average_wait_ms = total_wait as f64 / total_completed as f64;
+    let average_turnaround_ms = total_turnaround as f64 / total_completed as f64;
+
+    let worker_usage = (monitor_result.average_active_workers / config.workers as f64) * 100.0;
+
+    SimulationResult {
+        name,
+
+        total_completed,
+        cpu_completed,
+        io_completed,
+        makespan_ms,
+        average_wait_ms,
+        average_turnaround_ms,
+        max_wait_ms: max_wait,
+
+        average_cpu: monitor_result.average_cpu,
+        worker_usage,
+        max_cpu: monitor_result.max_cpu,
+    }
+}
