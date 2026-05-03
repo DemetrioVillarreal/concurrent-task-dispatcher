@@ -13,7 +13,6 @@ enum TaskKind {
 
 #[derive(Clone)]
 struct Task {
-    
     id: usize,
     arrival_time: u128,
     kind: TaskKind,
@@ -23,9 +22,7 @@ struct Task {
 }
 
 struct CompletedTask {
-
     id: usize,
-
     kind: TaskKind,
     wait_ms: u128,
     turnaround_ms: u128,
@@ -70,7 +67,6 @@ struct SimulationResult {
     average_wait_ms: f64,
     average_turnaround_ms: f64,
     max_wait_ms: u128,
-
     average_cpu: f64,
     worker_usage: f64,
     max_cpu: u32,
@@ -99,7 +95,6 @@ fn main() {
         duration_ms: 200,
         seed: 54321,
     };
-
 
     let fifo_70 = run_simulation(config_70.clone(), Policy::Fifo);
     print_result(&fifo_70);
@@ -131,13 +126,11 @@ fn main() {
     println!("70/30 FIFO runtime: {} ms", fifo_70.makespan_ms);
     println!("70/30 Optimized runtime: {} ms", optimized_70.makespan_ms);
     println!("70/30 FIFO average CPU: {:.2}%", fifo_70.average_cpu);
-
     println!("70/30 Optimized average CPU: {:.2}%", optimized_70.average_cpu);
     println!();
     println!("80/20 FIFO runtime: {} ms", fifo_80.makespan_ms);
     println!("80/20 Optimized runtime: {} ms", optimized_80.makespan_ms);
     println!("80/20 FIFO average CPU: {:.2}%", fifo_80.average_cpu);
-
     println!("80/20 Optimized average CPU: {:.2}%", optimized_80.average_cpu);
 }
 
@@ -211,7 +204,6 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
         };
 
         MonitorResult {
-
             average_cpu,
             average_active_workers,
             max_cpu,
@@ -234,8 +226,6 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
                 kind = TaskKind::IO;
                 cpu_cost = 10;
             } else {
-
-
                 kind = TaskKind::CPU;
                 cpu_cost = 35;
             }
@@ -285,8 +275,6 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
 
                         let completed = CompletedTask {
                             id: task.id,
-
-
                             kind: task.kind,
                             wait_ms: start.duration_since(task.created_at).as_millis(),
                             turnaround_ms: finish.duration_since(task.created_at).as_millis(),
@@ -320,7 +308,6 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
 
     while completed_tasks.len() < config.total_tasks {
         loop {
-
             match task_receiver.try_recv() {
                 Ok(task) => {
                     match policy {
@@ -367,7 +354,6 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
                 }
                 Err(mpsc::TryRecvError::Disconnected) => {
                     break;
-
                 }
             }
         }
@@ -423,7 +409,6 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
     generator_handle.join().unwrap();
 
     for handle in worker_handles {
-
         handle.join().unwrap();
     }
 
@@ -438,8 +423,6 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
     let mut io_completed = 0;
 
     for task in &completed_tasks {
-
-
         total_wait += task.wait_ms;
         total_turnaround += task.turnaround_ms;
 
@@ -469,7 +452,6 @@ fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
         average_wait_ms,
         average_turnaround_ms,
         max_wait_ms: max_wait,
-
         average_cpu: monitor_result.average_cpu,
         worker_usage,
         max_cpu: monitor_result.max_cpu,
@@ -496,7 +478,6 @@ fn choose_task(
 
         Policy::Optimized => {
             if let Some(task) = cpu_queue.front() {
-
                 if current_cpu + task.cpu_cost <= 100 && current_cpu <= 65 {
                     return cpu_queue.pop_front();
                 }
@@ -514,15 +495,12 @@ fn choose_task(
                 }
             }
 
-
             None
         }
-
     }
 }
 
 fn print_result(result: &SimulationResult) {
-
     println!();
     println!("Simulation: {}", result.name);
     println!("Total completed: {}", result.total_completed);
