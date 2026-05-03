@@ -71,4 +71,62 @@ struct SimulationResult {
     worker_usage: f64,
     max_cpu: u32,
 }
-//FN MAIN START
+
+
+
+fn main() {
+
+    let config = Config {
+
+        total_tasks: 1000,
+        workers: 8,
+        io_percent: 70,
+        interval_ms: 20,
+        duration_ms: 200,
+        seed: 12345,
+
+    };
+
+    println!("Concurrent Task Dispatcher");
+    println!("Tasks: {}", config.total_tasks);
+    println!("Workers: {}", config.workers);
+    println!("Workload: {}% IO / {}% CPU", config.io_percent, 100 - config.io_percent);
+    println!();
+
+    let fifo_result = run_simulation(config.clone(), Policy::Fifo);
+    print_result(&fifo_result);
+
+    println!();
+    println!("----------------------------------------");
+    println!();
+
+    let optimized_result = run_simulation(config.clone(), Policy::Optimized);
+    print_result(&optimized_result);
+
+    println!();
+    println!("Comparison:");
+    println!("FIFO runtime: {} ms", fifo_result.makespan_ms);
+    println!("Optimized runtime: {} ms", optimized_result.makespan_ms);
+    println!("FIFO average CPU: {:.2}%", fifo_result.average_cpu);
+    println!("Optimized average CPU: {:.2}%", optimized_result.average_cpu);
+}
+
+fn run_simulation(config: Config, policy: Policy) -> SimulationResult {
+
+    let name = match policy {
+        Policy::Fifo => "FIFO".to_string(),
+        Policy::Optimized => "Optimized".to_string(),
+    };
+
+    println!("Starting {} simulation...", name);
+
+    let start_time = Instant::now();
+
+    let shared_state = Arc::new(Mutex::new(SharedState {
+
+        current_cpu: 0,
+        active_workers: 0,
+        done: false,
+    }));
+
+    
